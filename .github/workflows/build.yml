@@ -22,7 +22,7 @@ jobs:
       - name: Install rust toolchain
         run: rustup update stable && rustup default stable
       - name: Install dependencies
-        run: apt install libjack-jackd2-dev
+        run: sudo apt install libjack-jackd2-dev
       - name: Build with cargo
         run: cargo build --verbose --release
       - name: Upload artifacts
