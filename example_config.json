@@ -1,0 +1,21 @@
+{
+    "web": {
+        "host": "::1",
+        "port": 8080
+    },
+    "inputs": {
+        "live_high": {
+            "name": "Online (live-high)",
+            "channels": 2
+        },
+        "fm_send": {
+            "name": "FM (send)"
+        },
+        "dab_send": {
+            "name": "DAB (send)"
+        }
+    },
+    "jack": {
+        "client_name": "loudness"
+    }
+}

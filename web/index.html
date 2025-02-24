@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URY Loudness Meter</title>
+
+    <style>
+        .inputs {
+            display: flex;
+            flex-direction: row;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1>
+            Loudness
+        </h1>
+
+        <div id="inputs" class="inputs">
+        </div>
+    </main>
+
+    <script type="module">
+        import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+        const DEFAULT_VALUES = {
+            momentary: null,
+            short_term: null,
+            global: null,
+            range: 0.0,
+        };
+
+        function makeDataset(levels) {
+            const handleInfinity = (v) => {
+                if (v === null) {
+                    return -Infinity;
+                } else {
+                    return Math.max(v, -50);
+                }
+            };
+
+            return [
+                {'label': 'Momentary', 'v': handleInfinity(levels.momentary)},
+                {'label': 'Short-term', 'v': handleInfinity(levels.short_term)},
+                {'label': 'Global', 'v': handleInfinity(levels.global)},
+            ];
+        }
+
+        function makeBars(parent) {
+            const width = 320;
+            const height = 512;
+            const marginTop = 16;
+            const marginBottom = 24;
+            const marginLeft = 32;
+            const marginRight = 16;
+
+            const svg = d3.create('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            parent.appendChild(svg.node());
+
+            const x = d3.scaleBand()
+                .domain(['Momentary', 'Short-term', 'Global'])
+                .range([marginLeft, width - marginRight])
+                .padding(0.1);
+            
+            const data = makeDataset(DEFAULT_VALUES);
+
+            const y = d3.scaleLinear()
+                .domain([-50, 10])
+                .range([height - marginBottom, marginTop]);
+
+            svg.append('g')
+                .attr("transform", `translate(${marginLeft},0)`)
+                .call(d3.axisLeft(y));
+
+            svg.append('g')
+                .attr("transform", `translate(0,${height - marginBottom})`)
+                .call(d3.axisBottom(x));
+
+            const bars = svg.append('g')
+                .attr('fill', 'steelblue')
+                .selectAll()
+                .data(data)
+                .join('rect')
+                .attr('x', (d) => x(d.label))
+                .attr('y', (d) => y(d.v))
+                .attr("height", (d) => y(-50) - y(d.v))
+                .attr("width", x.bandwidth());
+
+            function update(levels) {
+                const data = makeDataset(levels);
+                bars.data(data)
+                    .attr("height", (d) => y(-50) - y(d.v))
+                    .attr('y', (d) => y(d.v));
+            }
+
+            return update;
+        }
+
+        function makeDlEntry(parent, k, v) {
+            const dt = document.createElement('dt');
+            const dd = document.createElement('dd');
+            dt.innerText = k;
+            dd.innerText = v;
+            parent.appendChild(dt);
+            parent.appendChild(dd);
+            return dd;
+        }
+
+        function makeInputSection(id, input) {
+            const root = document.createElement('section');
+            root.classList.add('input');
+            const title = document.createElement('h2');
+            title.innerText = input.name;
+            root.appendChild(title);
+            const dl = document.createElement('dl');
+            const momentaryEle = makeDlEntry(dl, 'Momentary', '');
+            const shortTermEle = makeDlEntry(dl, 'Short-term (3s)', '');
+            const globalEle = makeDlEntry(dl, 'Global', '');
+            const rangeEle = makeDlEntry(dl, 'LRA', '');
+            root.appendChild(dl);
+
+            const resetButton = document.createElement('button');
+            resetButton.innerText = 'Reset';
+            resetButton.addEventListener('click', async () => {
+                resetButton.disabled = true;
+                const resp = await fetch(`/api/input/${id}/reset`, {method: 'POST'});
+                if (!resp.ok) {
+                    console.log('failed to reset input', resp);
+                    alert(`failed to reset input, got status: ${resp.status} (${resp.statusText})`);
+                }
+                resetButton.disabled = false;
+            });
+            root.appendChild(resetButton);
+            root.appendChild(document.createElement('br'));
+
+            const updateBars = makeBars(root);
+
+            function update(levels) {
+                function formatValue(v) {
+                    if (v === null) {
+                        return '-inf';
+                    } else {
+                        return v.toFixed(3);
+                    }
+                }
+
+                momentaryEle.innerText = `${formatValue(levels.momentary)} LUFS`;
+                shortTermEle.innerText = `${formatValue(levels.short_term)} LUFS`;
+                globalEle.innerText = `${formatValue(levels.global)} LUFS`;
+                rangeEle.innerText = `±${formatValue(levels.range)} LUFS`;
+                updateBars(levels);
+            }
+
+            return {
+                root,
+                update,
+            };
+        }
+
+        async function init() {
+            const config = await fetch('/api/inputs').then(res => res.json());
+            const inputs = [];
+            const inputsById = {};
+            for (const inputId in config.inputs) {
+                if (Object.prototype.hasOwnProperty.call(config.inputs, inputId)) {
+                    const input = config.inputs[inputId];
+                    const inputWithEles = {
+                        ...input,
+                        ...(makeInputSection(inputId, input)),
+                    };
+                    inputs.push({
+                        id: inputId,
+                        ...inputWithEles,
+                    });
+                    inputsById[inputId] = inputWithEles;
+                }
+            }
+            const inputsEle = document.getElementById('inputs');
+            inputs.sort((a, b) => a.id.localeCompare(b.id));
+            inputs.forEach(input => inputsEle.appendChild(input.root));
+            inputs.forEach(input => input.update(DEFAULT_VALUES));
+
+            function updateInput(input, data) {
+                input.update(data);
+            }
+
+            const ws = new WebSocket('/api/ws');
+            ws.onmessage = (ev) => {
+                if (typeof ev.data === 'string') {
+                    const data = JSON.parse(ev.data);
+                    for (const inputId in data.inputs) {
+                        if (Object.prototype.hasOwnProperty.call(data.inputs, inputId)) {
+                            const input = data.inputs[inputId];
+                            updateInput(inputsById[inputId], input);
+                        }
+                    }
+                }
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
