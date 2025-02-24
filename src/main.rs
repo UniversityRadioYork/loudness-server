@@ -36,11 +36,16 @@ enum Command {
 
 const UPDATE_INTERVAL: f64 = 0.1;
 
+#[cfg(debug_assertions)]
+const DEFAULT_LOG_LEVEL: &str = "debug";
+#[cfg(not(debug_assertions))]
+const DEFAULT_LOG_LEVEL: &str = "info";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_subscriber::filter::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| DEFAULT_LOG_LEVEL.into()),
         ))
         .init();
 
