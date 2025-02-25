@@ -1,6 +1,16 @@
 # loudness-server
 
+## What
+
 A loudness-measuring web-app for monitoring multiple streams at once.
+
+## How
+
+It takes audio inputs from JACK, measures their loudness according to EBU R 128, and then streams that data to a simple web UI.
+
+## :eyes:
+
+![A screenshot showing four sets of loudness meters, all showing different levels](docs/screenshot.png)
 
 ## Usage
 
@@ -43,10 +53,10 @@ Run the executable, and open the web UI using the port you configured.
 
 You'll need to link things to the input ports in JACK to feed audio into the server. This can be done with `jack_connect`. Input ports are named as `{id}_{i}` where `{i}` is the index of the channel, starting from zero.
 
-For example, with the configuration above, to link an analogue stereo input to `live_high`, you could use the following:
+For example, with the configuration above, to link a stereo input (say from a liquidsoap script) to the input named `live_high`, you could use the following:
 ```bash
-jack_connect system:capture_3 loudness:live_high_0
-jack_connect system:capture_4 loudness:live_high_1
+jack_connect live_high:out_0 loudness:live_high_0
+jack_connect live_high:out_1 loudness:live_high_1
 ```
 
 The path to the config file can be changed with the environment variable `CONFIG_PATH`.
